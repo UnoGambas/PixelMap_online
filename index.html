@@ -16,6 +16,8 @@
         margin: 0;
         padding: 0;
         overflow: hidden; /* 스크롤바 제거 */
+        overscroll-behavior: none; /* prevent pull-to-refresh and overscroll */
+        touch-action: none; /* prevent touch scrolling */
         background-color: #000;
         font-family: sans-serif;
       }
