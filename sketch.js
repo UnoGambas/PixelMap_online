@@ -205,15 +205,17 @@ function setupEditor() {
   editorCanvasX = (width - editorTotalSize) / 2;
   editorCanvasY = (height - editorTotalSize) / 2;
 
-  editorCurrentColor = color(0); // 기본 검은색
-  
-  // 16x16 그리드 데이터 초기화 (모두 흰색)
-  editorGridData = Array(editorCanvasSize).fill(null).map(() => 
-    Array(editorCanvasSize).fill(color(255))
-  );
+  // 기본 색상 설정(이미 설정되어 있으면 덮어쓰지 않음)
+  if (typeof editorCurrentColor === 'undefined') editorCurrentColor = color(0);
 
-  // UI 위치 업데이트
-  // Only position editor UI if color buttons were created
+  // 16x16 그리드 데이터는 이미 존재하면 유지(윈도우 리사이즈로 인한 초기화 방지)
+  if (!editorGridData || editorGridData.length !== editorCanvasSize || editorGridData[0].length !== editorCanvasSize) {
+    editorGridData = Array(editorCanvasSize).fill(null).map(() => 
+      Array(editorCanvasSize).fill(color(255))
+    );
+  }
+
+  // UI 위치 업데이트 (버튼이 생성된 경우에만)
   if (typeof colorBtns !== 'undefined' && colorBtns.length > 0) positionEditorUI(); 
 }
 
