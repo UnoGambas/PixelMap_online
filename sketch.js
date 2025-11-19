@@ -17,8 +17,8 @@ let editorCanvasX, editorCanvasY, editorTotalSize; // 에디터 위치/크기
 
 // 맵 변수 (간소화된 [B])
 let TILE_SIZE = 64;   // 맵에 표시될 타일 크기
-let MAP_WIDTH = 64;   // 맵 가로 타일 개수
-let MAP_HEIGHT = 64;  // 맵 세로 타일 개수
+let MAP_WIDTH = 65;   // 맵 가로 타일 개수
+let MAP_HEIGHT = 65;  // 맵 세로 타일 개수
 let camX = 0, camY = 0;
 let isDraggingMap = false;
 let lastMouseX, lastMouseY;
