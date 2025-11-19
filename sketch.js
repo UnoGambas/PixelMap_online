@@ -108,14 +108,14 @@ function setupUI() {
   }
 
   // 기타 에디터 버튼들
-  btnClear = createButton('✨ 지우기');
+  btnClear = createButton('Clear All');
   btnClear.mousePressed(clearEditor);
 
   inputStory = createInput('');
   inputStory.attribute('placeholder', '스토리를 입력하세요...');
   inputStory.size(200);
 
-  btnSave = createButton('저장하고 맵에 심기');
+  btnSave = createButton('Upload');
   btnSave.mousePressed(saveAndUpload);
 
   // 위치 및 초기 표시 상태 설정
