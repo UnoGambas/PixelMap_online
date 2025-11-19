@@ -17,8 +17,9 @@ let editorCanvasX, editorCanvasY, editorTotalSize; // 에디터 위치/크기
 
 // 맵 변수 (간소화된 [B])
 let TILE_SIZE = 64;   // 맵에 표시될 타일 크기
-let MAP_WIDTH = 65;   // 맵 가로 타일 개수
-let MAP_HEIGHT = 65;  // 맵 세로 타일 개수
+let MAP_WIDTH = 64;   // 맵 가로 타일 개수
+let MAP_HEIGHT = 64;  // 맵 세로 타일 개수
+let MAP_MARGIN = 200; // 맵 주위에 보이는 여백(픽셀 단위)
 let camX = 0, camY = 0;
 let isDraggingMap = false;
 let lastMouseX, lastMouseY;
@@ -206,7 +207,8 @@ function drawOnEditor(px, py) {
 
 function drawMap() {
   push();
-  translate(-camX, -camY); // 카메라 위치만큼 맵 이동
+  // 카메라 위치만큼 맵 이동, +MAP_MARGIN으로 맵을 캔버스 안쪽에 여백을 둠
+  translate(-camX + MAP_MARGIN, -camY + MAP_MARGIN);
 
   // 맵 배경 격자 (연하게)
   stroke(50);
@@ -243,8 +245,9 @@ function drawMap() {
 
 // 화면 좌표(px)를 맵 타일 좌표(tX, tY)로 변환
 function worldToTile(wx, wy) {
-  let tX = floor(wx / TILE_SIZE);
-  let tY = floor(wy / TILE_SIZE);
+  // 월드 좌표에서 여백을 빼고 타일 좌표로 변환
+  let tX = floor((wx - MAP_MARGIN) / TILE_SIZE);
+  let tY = floor((wy - MAP_MARGIN) / TILE_SIZE);
   return { tX, tY };
 }
 
@@ -422,8 +425,10 @@ function mouseDragged() {
     camY -= dy;
     
     // 카메라가 맵 밖으로 나가지 않도록 제한
-    const maxCamX = MAP_WIDTH * TILE_SIZE - width;
-    const maxCamY = MAP_HEIGHT * TILE_SIZE - height;
+    const totalMapWidth = MAP_WIDTH * TILE_SIZE + MAP_MARGIN * 2;
+    const totalMapHeight = MAP_HEIGHT * TILE_SIZE + MAP_MARGIN * 2;
+    const maxCamX = totalMapWidth - width;
+    const maxCamY = totalMapHeight - height;
     camX = constrain(camX, 0, max(0, maxCamX)); // 맵이 화면보다 작을 경우 대비
     camY = constrain(camY, 0, max(0, maxCamY));
     
