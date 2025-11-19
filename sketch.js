@@ -6,32 +6,38 @@ const TABLE_NAME = 'treasures';   // 1단계에서 만든 테이블 이름
 let supabase;
 
 // --- 1. 전역 변수 ---
-let currentMode = 'DRAW'; // 'DRAW' 또는 'EXPLORE'
+let currentMode = 'DRAW'; 
 
-// 에디터 변수 (간소화된 [C])
-let editorCanvasSize = 16; // 16x16 픽셀 에디터
+// 에디터 변수
+let editorCanvasSize = 16;
 let editorPixelSize;
 let editorGridData;
 let editorCurrentColor;
-let editorCanvasX, editorCanvasY, editorTotalSize; // 에디터 위치/크기
+let editorCanvasX, editorCanvasY, editorTotalSize; 
 
-// 맵 변수 (간소화된 [B])
-let TILE_SIZE = 64;   // 맵에 표시될 타일 크기
-let MAP_WIDTH = 64;   // 맵 가로 타일 개수
-let MAP_HEIGHT = 64;  // 맵 세로 타일 개수
-let MAP_MARGIN = 200; // 맵 주위에 보이는 여백(픽셀 단위)
+// 맵 변수
+let TILE_SIZE = 64;
+let MAP_WIDTH = 64;
+let MAP_HEIGHT = 64;
+let MAP_MARGIN = 200;
 let camX = 0, camY = 0;
+// 사이드바 너비 (왼쪽 컨트롤 영역)
+let SIDEBAR_WIDTH = 220;
+let sidebarDiv; // DOM 컨테이너
 let isDraggingMap = false;
 let lastMouseX, lastMouseY;
-let galleryItems = []; // { tileX, tileY, story, img }
-let loadedImages = {}; // 이미지 중복 로드 방지 캐시
+let galleryItems = [];
+let loadedImages = {};
 
 // UI 요소
 let btnDrawMode, btnExploreMode;
-let btnBlack, btnWhite, btnClear;
+// [수정됨] 개별 버튼 변수 대신 배열 사용
+let colorBtns = []; 
+let btnClear;
 let inputStory;
 let btnSave;
-let statusMessage = "모드를 선택하세요.";
+let btnToggleSidebar;
+let sidebarVisible = true;
 
 // --- 2. p5.js 핵심 함수 ---
 
@@ -60,48 +66,124 @@ function draw() {
   } else if (currentMode === 'EXPLORE') {
     drawMap(); // 맵 그리기
   }
-
-  drawStatus(); // 상단 상태 메시지 그리기
 }
 
 // --- 3. 모드 변경 및 UI 설정 ---
 
 function setupUI() {
-  // 모드 변경 버튼
+  // 사이드바 컨테이너 생성
+  sidebarDiv = createDiv();
+  sidebarDiv.style('background', '#222');
+  sidebarDiv.style('color', '#fff');
+  sidebarDiv.style('padding', '10px');
+  sidebarDiv.position(0, 0);
+  sidebarDiv.size(SIDEBAR_WIDTH, height);
+
+  // 사이드바 토글 버튼 (항상 보이도록 좌측 상단에 둠)
+  btnToggleSidebar = createButton('☰');
+  btnToggleSidebar.style('font-size', '16px');
+  btnToggleSidebar.style('padding', '6px');
+  btnToggleSidebar.position(8, 8);
+  btnToggleSidebar.mousePressed(toggleSidebar);
+
+  // 모드 변경 버튼 (사이드바에 배치)
+  const sidebarX = 12;
+  // 시작 Y는 토글 버튼 바로 아래로 설정해서 모든 컨트롤이 토글 아래로 정렬되게 함
+  let currentY = (btnToggleSidebar && typeof btnToggleSidebar.y !== 'undefined') ?
+    btnToggleSidebar.y + (btnToggleSidebar.elt.offsetHeight || 28) + 8 : 12;
+
   btnDrawMode = createButton('✏️ 그리기');
-  btnDrawMode.position(10, 10);
+  btnDrawMode.position(sidebarX, currentY);
   btnDrawMode.mousePressed(setDrawMode);
+  currentY += (btnDrawMode.elt.offsetHeight || 30) + 8;
 
   btnExploreMode = createButton('🌍 탐험하기');
-  btnExploreMode.position(btnDrawMode.x + btnDrawMode.width + 5, 10);
+  btnExploreMode.position(sidebarX, currentY);
   btnExploreMode.mousePressed(setExploreMode);
+  currentY += (btnExploreMode.elt.offsetHeight || 30) + 14;
 
-  // --- 에디터 UI (초기에는 숨김) ---
-  btnBlack = createButton('⬛ 검은색');
-  btnBlack.mousePressed(() => { editorCurrentColor = color(0); });
+  // --- [수정됨] 색상 팔레트 버튼 생성 ---
+  // 색상 목록 정의 (검정, 흰색 + 무지개색)
+  const palette = [
+    { label: '⬛', c: color(0) },          // 검정
+    { label: '⬜', c: color(255) },        // 흰색
+    { label: '🟥', c: color(255, 0, 0) },    // 빨강
+    { label: '🟧', c: color(255, 165, 0) },  // 주황
+    { label: '🟨', c: color(255, 255, 0) },  // 노랑
+    { label: '🟩', c: color(0, 128, 0) },    // 초록
+    { label: '🟦', c: color(0, 0, 255) },    // 파랑
+    { label: '🟪', c: color(75, 0, 130) },   // 남색 (Indigo)
+    { label: '🟣', c: color(238, 130, 238) } // 보라 (Violet)
+  ];
 
-  btnWhite = createButton('⬜ 흰색');
-  btnWhite.mousePressed(() => { editorCurrentColor = color(255); });
+  colorBtns = []; // 배열 초기화
+  for (let p of palette) {
+    let btn = createButton(p.label);
+    // 버튼 클릭 시 해당 색상으로 설정
+    btn.mousePressed(() => { 
+      editorCurrentColor = p.c; 
+      // (선택 사항) 클릭 시 현재 선택된 색을 알리는 UI 효과를 추가할 수도 있습니다.
+    });
+    btn.style('font-size', '20px'); // 이모지 잘 보이게 크기 조절
+    btn.style('background', 'transparent');
+    btn.style('border', 'none');
+    btn.style('cursor', 'pointer');
+    colorBtns.push(btn);
+  }
+  // 기타 에디터 버튼들 (사이드바 아래에 배치)
+  // 색상 버튼들을 사이드바에 세로로 정렬
+  let paletteY = currentY;
+  const gap = 8;
+  for (let btn of colorBtns) {
+    btn.position(sidebarX, paletteY);
+    paletteY += (btn.elt.offsetHeight || 36) + gap;
+  }
 
   btnClear = createButton('✨ 지우기');
   btnClear.mousePressed(clearEditor);
+  btnClear.position(sidebarX, paletteY + 6);
 
   inputStory = createInput('');
   inputStory.attribute('placeholder', '스토리를 입력하세요...');
-  inputStory.size(200);
+  inputStory.size(SIDEBAR_WIDTH - 24);
+  inputStory.position(sidebarX, btnClear.y + btnClear.elt.offsetHeight + 10);
 
   btnSave = createButton('저장하고 맵에 심기');
   btnSave.mousePressed(saveAndUpload);
+  btnSave.position(sidebarX, inputStory.y + inputStory.elt.offsetHeight + 10);
 
-  // 에디터 UI 위치 잡기 (setupEditor에서 계산된 위치 기반)
+  // 위치 및 초기 표시 상태 설정
   positionEditorUI();
-  toggleEditorUI(false); // 일단 모두 숨김
+  toggleEditorUI(false);
 }
 
+// 사이드바 토글 처리: 사이드바와 사이드바 내부 컨트롤들의 표시 상태를 전환
+function toggleSidebar() {
+  sidebarVisible = !sidebarVisible;
+  const style = sidebarVisible ? 'block' : 'none';
+  if (sidebarDiv) sidebarDiv.style('display', style);
+
+  // 모드 버튼
+  if (btnDrawMode) btnDrawMode.style('display', style);
+  if (btnExploreMode) btnExploreMode.style('display', style);
+
+  // 팔레트 버튼들
+  for (let b of colorBtns) {
+    b.style('display', style);
+  }
+
+  // 기타 컨트롤
+  if (btnClear) btnClear.style('display', style);
+  if (inputStory) inputStory.style('display', style);
+  if (btnSave) btnSave.style('display', style);
+
+  // 레이아웃 재계산
+  setupEditor();
+  positionEditorUI();
+}
 function setDrawMode() {
   currentMode = 'DRAW';
   toggleEditorUI(true); // 그리기 UI 표시
-  statusMessage = "픽셀 에디터: 그림을 그리고 '저장' 버튼을 누르세요.";
   btnDrawMode.style('background-color', '#aaa');
   btnExploreMode.style('background-color', '#fff');
 }
@@ -109,29 +191,50 @@ function setDrawMode() {
 function setExploreMode() {
   currentMode = 'EXPLORE';
   toggleEditorUI(false); // 그리기 UI 숨김
-  statusMessage = "탐험 모드: 맵을 드래그하고 아이템을 클릭하세요.";
   btnDrawMode.style('background-color', '#fff');
   btnExploreMode.style('background-color', '#aaa');
   loadTreasures(); // 맵에 들어갈 때마다 보물 목록 새로고침
 }
 
 // 그리기 UI 표시/숨김
+// 그리기 UI 표시/숨김
 function toggleEditorUI(show) {
   let style = show ? 'block' : 'none';
-  btnBlack.style('display', style);
-  btnWhite.style('display', style);
+  
+  // [수정됨] 모든 색상 버튼 토글
+  for(let btn of colorBtns) {
+    btn.style('display', style);
+  }
+  
   btnClear.style('display', style);
   inputStory.style('display', style);
   btnSave.style('display', style);
 }
 
 // 에디터 UI 위치 계산
+// 에디터 UI 위치 계산
 function positionEditorUI() {
-  btnBlack.position(editorCanvasX, editorCanvasY + editorTotalSize + 10);
-  btnWhite.position(btnBlack.x + btnBlack.width + 5, btnBlack.y);
-  btnClear.position(btnWhite.x + btnWhite.width + 5, btnBlack.y);
-  inputStory.position(editorCanvasX, btnBlack.y + btnBlack.height + 10);
-  btnSave.position(inputStory.x, inputStory.y + inputStory.height + 10);
+  // 사이드바 내부에 UI 배치
+  const startX = 12;
+  // 시작 Y는 토글 버튼 바로 아래로 설정
+  let y = (btnToggleSidebar && typeof btnToggleSidebar.y !== 'undefined') ?
+    btnToggleSidebar.y + (btnToggleSidebar.elt.offsetHeight || 28) + 8 : 12;
+  const gap = 8;
+
+  // 모드 버튼 (이미 위치함) — 보장 차원에서 다시 정렬
+  if (btnDrawMode) { btnDrawMode.position(startX, y); y += (btnDrawMode.elt.offsetHeight || 30) + gap; }
+  if (btnExploreMode) { btnExploreMode.position(startX, y); y += (btnExploreMode.elt.offsetHeight || 30) + (gap * 2); }
+
+  // 색상 버튼들 세로 배치
+  for (let btn of colorBtns) {
+    btn.position(startX, y);
+    y += (btn.elt.offsetHeight || 36) + gap;
+  }
+
+  // 지우기 / 스토리 / 저장 버튼
+  if (btnClear) { btnClear.position(startX, y + 6); }
+  if (inputStory) { inputStory.position(startX, (btnClear ? btnClear.y + (btnClear.elt.offsetHeight || 30) + 10 : y + 40)); }
+  if (btnSave) { btnSave.position(startX, inputStory.y + (inputStory.elt.offsetHeight || 24) + 10); }
 }
 
 function drawStatus() {
@@ -148,7 +251,8 @@ function setupEditor() {
   // 에디터를 화면 중앙에 배치
   editorTotalSize = min(width, height) * 0.7; // 화면의 70% 크기
   editorPixelSize = editorTotalSize / editorCanvasSize;
-  editorCanvasX = (width - editorTotalSize) / 2;
+  // 사이드바를 남긴 영역 안에서 중앙에 배치
+  editorCanvasX = SIDEBAR_WIDTH + (width - SIDEBAR_WIDTH - editorTotalSize) / 2;
   editorCanvasY = (height - editorTotalSize) / 2;
 
   editorCurrentColor = color(0); // 기본 검은색
@@ -159,7 +263,8 @@ function setupEditor() {
   );
 
   // UI 위치 업데이트
-  if (btnBlack) positionEditorUI(); 
+  // Only position editor UI if color buttons were created
+  if (typeof colorBtns !== 'undefined' && colorBtns.length > 0) positionEditorUI(); 
 }
 
 // 에디터 캔버스 지우기
@@ -254,7 +359,7 @@ function worldToTile(wx, wy) {
 // --- 6. Supabase 연동 함수 (핵심 [A] + DB) ---
 
 async function saveAndUpload() {
-  statusMessage = "저장 중... 잠시만 기다려주세요...";
+  console.log("저장 중... 잠시만 기다려주세요...");
 
   // 1. 스토리 가져오기
   const story = inputStory.value();
@@ -280,8 +385,7 @@ async function saveAndUpload() {
     });
 
   if (storageError) {
-    statusMessage = "Storage 업로드 실패: " + storageError.message;
-    console.error(storageError);
+    console.error('Storage 업로드 실패:', storageError);
     return;
   }
 
@@ -305,28 +409,25 @@ async function saveAndUpload() {
     .insert(newItem);
 
   if (dbError) {
-    statusMessage = "Database 저장 실패: " + dbError.message;
-    console.error(dbError);
-    // (실패 시 Storage에 업로드된 파일을 삭제하는 롤백 로직이 필요하지만, '간단한' 구현을 위해 생략)
+    console.error('Database 저장 실패:', dbError);
     return;
   }
 
-  statusMessage = "저장 완료! '탐험하기' 모드에서 확인하세요.";
+  console.log("저장 완료! '탐험하기' 모드에서 확인하세요.");
   clearEditor();
   inputStory.value('');
 }
 
 // DB에서 모든 보물 아이템 불러오기
 async function loadTreasures() {
-  statusMessage = "공동 지도에서 보물 불러오는 중...";
+  console.log('공동 지도에서 보물 불러오는 중...');
   
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select('*'); // 모든 아이템 가져오기
 
   if (error) {
-    statusMessage = "보물 로드 실패: " + error.message;
-    console.error(error);
+    console.error('보물 로드 실패:', error);
     return;
   }
 
@@ -360,7 +461,7 @@ async function loadTreasures() {
     }
   }
   
-  statusMessage = `보물 ${data.length}개 로드 완료. 맵을 탐험하세요.`;
+  console.log(`보물 ${data.length}개 로드 완료. 맵을 탐험하세요.`);
 }
 
 // 픽셀 그리드 데이터를 PNG Blob 객체로 변환 (비동기)
@@ -448,4 +549,8 @@ function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   setupEditor(); // 에디터 크기 및 위치 재계산
   positionEditorUI(); // UI 버튼 위치 재조정
+  // 사이드바 크기 재조정
+  if (sidebarDiv) sidebarDiv.size(SIDEBAR_WIDTH, height);
 }
+
+// 제거된 statusMessage 대신 로그를 사용하므로 화면에 텍스트로 표시하는 drawStatus 함수는 삭제되었습니다.
