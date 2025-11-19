@@ -25,6 +25,12 @@ let isDraggingMap = false;
 let lastMouseX, lastMouseY;
 let galleryItems = [];
 let loadedImages = {};
+// 줌 관련
+let mapScale = 1;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 3;
+
+let btnZoomIn, btnZoomOut;
 
 // UI 요소
 let btnDrawMode, btnExploreMode;
@@ -77,6 +83,19 @@ function setupUI() {
   btnExploreMode = createButton('🌍 탐험하기');
   btnExploreMode.position(btnDrawMode.x + btnDrawMode.width + 5, 10);
   btnExploreMode.mousePressed(setExploreMode);
+
+  // 줌 버튼 (탐험 모드에서 사용)
+  btnZoomIn = createButton('+');
+  btnZoomIn.position(btnExploreMode.x + btnExploreMode.width + 10, 10);
+  btnZoomIn.mousePressed(() => {
+    if (currentMode === 'EXPLORE') doZoom(1.2, width/2, height/2);
+  });
+
+  btnZoomOut = createButton('-');
+  btnZoomOut.position(btnZoomIn.x + btnZoomIn.width + 5, 10);
+  btnZoomOut.mousePressed(() => {
+    if (currentMode === 'EXPLORE') doZoom(1/1.2, width/2, height/2);
+  });
 
   // --- [수정됨] 색상 팔레트 버튼 생성 ---
   // 색상 목록 정의 (검정, 흰색 + 무지개색)
@@ -152,6 +171,9 @@ function toggleEditorUI(show) {
   btnClear.style('display', style);
   inputStory.style('display', style);
   btnSave.style('display', style);
+  // 줌 버튼은 탐험 모드에서만 보이도록 처리
+  btnZoomIn.style('display', show ? 'none' : 'block');
+  btnZoomOut.style('display', show ? 'none' : 'block');
 }
 
 // 에디터 UI 위치 계산
@@ -264,8 +286,10 @@ function drawOnEditor(px, py) {
 
 function drawMap() {
   push();
-  // 카메라 위치만큼 맵 이동, +MAP_MARGIN으로 맵을 캔버스 안쪽에 여백을 둠
-  translate(-camX + MAP_MARGIN, -camY + MAP_MARGIN);
+  // 여백 위치로 이동한 뒤 줌과 카메라 변환 적용
+  translate(MAP_MARGIN, MAP_MARGIN);
+  scale(mapScale);
+  translate(-camX, -camY);
 
   // 맵 배경 격자 (연하게)
   stroke(50);
@@ -285,7 +309,7 @@ function drawMap() {
   }
 
   // 마우스 호버 효과
-  let { tX, tY } = worldToTile(mouseX + camX, mouseY + camY);
+  let { tX, tY } = worldToTile(mouseX, mouseY);
   let hoveredItem = galleryItems.find(item => item.tileX === tX && item.tileY === tY);
   
   if (hoveredItem) {
@@ -301,11 +325,25 @@ function drawMap() {
 }
 
 // 화면 좌표(px)를 맵 타일 좌표(tX, tY)로 변환
-function worldToTile(wx, wy) {
-  // 월드 좌표에서 여백을 빼고 타일 좌표로 변환
-  let tX = floor((wx - MAP_MARGIN) / TILE_SIZE);
-  let tY = floor((wy - MAP_MARGIN) / TILE_SIZE);
+function worldToTile(screenX, screenY) {
+  // 스크린 좌표를 맵의 픽셀 좌표로 변환(여백/스케일/카메라 고려)
+  const mapX = (screenX - MAP_MARGIN) / mapScale + camX;
+  const mapY = (screenY - MAP_MARGIN) / mapScale + camY;
+  const tX = floor(mapX / TILE_SIZE);
+  const tY = floor(mapY / TILE_SIZE);
   return { tX, tY };
+}
+
+// 카메라가 허용 범위를 벗어나지 않도록 제한
+function constrainCamera() {
+  const mapPixelW = MAP_WIDTH * TILE_SIZE;
+  const mapPixelH = MAP_HEIGHT * TILE_SIZE;
+  const viewMapW = max(0, (width - MAP_MARGIN * 2) / mapScale);
+  const viewMapH = max(0, (height - MAP_MARGIN * 2) / mapScale);
+  const maxCamX = max(0, mapPixelW - viewMapW);
+  const maxCamY = max(0, mapPixelH - viewMapH);
+  camX = constrain(camX, 0, maxCamX);
+  camY = constrain(camY, 0, maxCamY);
 }
 
 // --- 6. Supabase 연동 함수 (핵심 [A] + DB) ---
@@ -453,7 +491,7 @@ function mousePressed() {
   } else if (currentMode === 'EXPLORE') {
     // '탐험' 모드
     // 1. 아이템 클릭 확인
-    let { tX, tY } = worldToTile(mouseX + camX, mouseY + camY);
+    let { tX, tY } = worldToTile(mouseX, mouseY);
     let clickedItem = galleryItems.find(item => item.tileX === tX && item.tileY === tY);
     
     if (clickedItem) {
@@ -478,8 +516,9 @@ function mouseDragged() {
     let dx = mouseX - lastMouseX;
     let dy = mouseY - lastMouseY;
     
-    camX -= dx;
-    camY -= dy;
+    // 드래그 거리는 화면 픽셀 단위이므로 스케일로 나눠서 맵 좌표로 변환
+    camX -= dx / mapScale;
+    camY -= dy / mapScale;
     
     // 카메라가 맵 밖으로 나가지 않도록 제한
     const totalMapWidth = MAP_WIDTH * TILE_SIZE + MAP_MARGIN * 2;
@@ -489,6 +528,7 @@ function mouseDragged() {
     camX = constrain(camX, 0, max(0, maxCamX)); // 맵이 화면보다 작을 경우 대비
     camY = constrain(camY, 0, max(0, maxCamY));
     
+    constrainCamera();
     lastMouseX = mouseX;
     lastMouseY = mouseY;
   }
@@ -500,9 +540,39 @@ function mouseReleased() {
   }
 }
 
+// 마우스 휠로 줌 조절 (탐험 모드)
+function mouseWheel(event) {
+  if (currentMode !== 'EXPLORE') return;
+  // event.delta > 0 : 스크롤 아래(줌 아웃), <0 : 위(줌 인)
+  const factor = event.delta > 0 ? 1/1.2 : 1.2;
+  doZoom(factor, mouseX, mouseY);
+  // p5 기본 동작 방지
+  return false;
+}
+
+// 줌 처리: factor는 곱해지는 값 (예: 1.2 또는 1/1.2), centerScreen은 화면상의 중심점
+function doZoom(factor, centerScreenX, centerScreenY) {
+  const newScale = constrain(mapScale * factor, MIN_SCALE, MAX_SCALE);
+  if (newScale === mapScale) return; // 변경 없음
+
+  // 화면 좌표 -> 맵 좌표(before)
+  const mapX_before = (centerScreenX - MAP_MARGIN) / mapScale + camX;
+  const mapY_before = (centerScreenY - MAP_MARGIN) / mapScale + camY;
+
+  // mapScale 갱신
+  mapScale = newScale;
+
+  // cam을 조정해서 중심점이 같은 맵 좌표를 가리키도록 함
+  camX = mapX_before - (centerScreenX - MAP_MARGIN) / mapScale;
+  camY = mapY_before - (centerScreenY - MAP_MARGIN) / mapScale;
+
+  constrainCamera();
+}
+
 // 창 크기가 변경되면 캔버스와 에디터 크기 재조정
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   setupEditor(); // 에디터 크기 및 위치 재계산
   positionEditorUI(); // UI 버튼 위치 재조정
+  constrainCamera(); // 창 크기 변경 후 카메라 범위 보정
 }
