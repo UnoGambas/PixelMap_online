@@ -3,7 +3,9 @@ const SUPABASE_URL = 'https://zqedegbajhsehgziorog.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxZWRlZ2JhamhzZWhnemlvcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NDM4NDksImV4cCI6MjA3ODUxOTg0OX0.PIXb9ZNB_wabtX4KH6cb89JqxDOpvNg-ibY9VlkR7g4';
 const BUCKET_NAME = 'pixel_art'; // 1단계에서 만든 버킷 이름
 const TABLE_NAME = 'treasures';   // 1단계에서 만든 테이블 이름
-let supabase;
+
+// Supabase 클라이언트 (CDN 전역 객체 window.supabase와 이름 충돌 방지를 위해 별도 변수 사용)
+let supabaseClient;
 
 // --- 1. 전역 변수 ---
 let currentMode = 'DRAW'; 
@@ -45,18 +47,14 @@ let statusMessage = "모드를 선택하세요.";
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  noSmooth(); // 픽셀 아트가 깨끗하게 보이도록 설정
+  noSmooth();
 
-  // Supabase 클라이언트 초기화
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // CDN v2에서 권장하는 방식
+  const { createClient } = window.supabase;
+  supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // 픽셀 에디터 초기화
   setupEditor();
-
-  // UI 버튼 초기화
   setupUI();
-
-  // '그리기' 모드로 시작
   setDrawMode();
 }
 
@@ -179,13 +177,33 @@ function toggleEditorUI(show) {
 // 에디터 UI 위치 계산
 // 에디터 UI 위치 계산
 function positionEditorUI() {
-  // position the editorPanel below the editor canvas
-  if (!editorPanel) return;
-  const px = Math.max(8, editorCanvasX);
-  const py = editorCanvasY + editorTotalSize + 10;
-  editorPanel.position(px, py);
-  // ensure editorPanel width matches editor width for nicer layout
-  editorPanel.style('width', `${editorTotalSize}px`);
+  let startX = editorCanvasX;
+  let startY = editorCanvasY + editorTotalSize + 10;
+  let x = startX;
+  let y = startY;
+  let gap = 5; // 버튼 사이 간격
+
+  // 색상 버튼들을 화면 폭에 맞춰 배치
+  for (let btn of colorBtns) {
+    // 버튼의 너비를 가져옵니다 (p5.js 요소는 .elt로 DOM 접근)
+    let btnWidth = btn.elt.offsetWidth || 40;
+    let btnHeight = btn.elt.offsetHeight || 40;
+
+    // 현재 줄에 자리가 부족하면 다음 줄로 내림
+    if (x + btnWidth > editorCanvasX + editorTotalSize) {
+      x = startX;
+      y += btnHeight + gap;
+    }
+
+    btn.position(x, y);
+    x += btnWidth + gap;
+  }
+
+  // 지우기 버튼은 색상 버튼들 아래에 배치
+  let nextY = y + 45;
+  btnClear.position(startX, nextY);
+  inputStory.position(startX, btnClear.y + btnClear.height + 10);
+  btnSave.position(inputStory.x, inputStory.y + inputStory.height + 10);
 }
 
 function drawStatus() {
@@ -345,7 +363,7 @@ async function saveAndUpload() {
   
   // 3. Supabase Storage에 업로드
   const filePath = `${Date.now()}_art.png`;
-  const { data: storageData, error: storageError } = await supabase.storage
+  const { data: storageData, error: storageError } = await supabaseClient.storage
     .from(BUCKET_NAME)
     .upload(filePath, blob, {
       contentType: 'image/png',
@@ -359,7 +377,7 @@ async function saveAndUpload() {
   }
 
   // 4. 업로드된 파일의 Public URL 가져오기
-  const { data: urlData } = supabase.storage
+  const { data: urlData } = supabaseClient.storage
     .from(BUCKET_NAME)
     .getPublicUrl(filePath);
   
@@ -373,7 +391,7 @@ async function saveAndUpload() {
     tile_y: floor(random(MAP_HEIGHT))
   };
 
-  const { error: dbError } = await supabase
+  const { error: dbError } = await supabaseClient
     .from(TABLE_NAME)
     .insert(newItem);
 
@@ -393,7 +411,7 @@ async function saveAndUpload() {
 async function loadTreasures() {
   statusMessage = "공동 지도에서 보물 불러오는 중...";
   
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from(TABLE_NAME)
     .select('*'); // 모든 아이템 가져오기
 
