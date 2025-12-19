@@ -179,35 +179,13 @@ function toggleEditorUI(show) {
 // 에디터 UI 위치 계산
 // 에디터 UI 위치 계산
 function positionEditorUI() {
-  let startX = editorCanvasX;
-  let startY = editorCanvasY + editorTotalSize + 10;
-  let x = startX;
-  let y = startY;
-  let gap = 5; // 버튼 사이 간격
-
-  // [수정됨] 색상 버튼들을 화면 폭에 맞춰 배치
-  for(let btn of colorBtns) {
-    // 버튼의 너비를 가져옵니다 (p5.js 요소는 .elt로 DOM 접근)
-    let btnWidth = btn.elt.offsetWidth || 40; 
-    let btnHeight = btn.elt.offsetHeight || 40;
-
-    // 현재 줄에 자리가 부족하면 다음 줄로 내림
-    if (x + btnWidth > editorCanvasX + editorTotalSize) {
-      x = startX;
-      y += btnHeight + gap;
-    }
-    
-    btn.position(x, y);
-    x += btnWidth + gap;
-  }
-
-  // 지우기 버튼은 색상 버튼들 아래에 배치
-  // 마지막 색상 버튼의 y 위치를 기준으로 다음 요소 위치 설정
-  let nextY = y + 45; 
-  
-  btnClear.position(startX, nextY);
-  inputStory.position(startX, btnClear.y + btnClear.height + 10);
-  btnSave.position(inputStory.x, inputStory.y + inputStory.height + 10);
+  // position the editorPanel below the editor canvas
+  if (!editorPanel) return;
+  const px = Math.max(8, editorCanvasX);
+  const py = editorCanvasY + editorTotalSize + 10;
+  editorPanel.position(px, py);
+  // ensure editorPanel width matches editor width for nicer layout
+  editorPanel.style('width', `${editorTotalSize}px`);
 }
 
 function drawStatus() {
